@@ -17,6 +17,12 @@ class PaymentCreate(BaseModel):
     webhook_url: HttpUrl
 
 
+class PaymentCreatedEvent(BaseModel):
+    event_id: UUID
+    event_type: str
+    payment_id: UUID
+
+
 class PaymentAccepted(BaseModel):
     payment_id: UUID
     status: str

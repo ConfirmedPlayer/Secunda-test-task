@@ -1,11 +1,11 @@
 import uuid
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import OutboxMessage, Payment
+from app.models import OutboxMessage, Payment, PaymentStatus
 from app.schemas import PaymentCreate
 
 
@@ -48,6 +48,19 @@ async def get_payment(session: AsyncSession, payment_id: UUID) -> Payment | None
 
 async def get_by_idempotency_key(session: AsyncSession, key: str) -> Payment | None:
     return await session.scalar(select(Payment).where(Payment.idempotency_key == key))
+
+
+async def mark_processed(
+    session: AsyncSession, payment_id: UUID, status: PaymentStatus
+) -> Payment | None:
+    # условие по статусу защищает от гонки с параллельной доставкой того же события
+    await session.execute(
+        update(Payment)
+        .where(Payment.id == payment_id, Payment.status == PaymentStatus.PENDING)
+        .values(status=status, processed_at=func.now())
+    )
+    await session.commit()
+    return await get_payment(session, payment_id)
 
 
 def matches_request(payment: Payment, data: PaymentCreate) -> bool:
