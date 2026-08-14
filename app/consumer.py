@@ -3,7 +3,7 @@ import logging
 from faststream import AckPolicy, FastStream
 from faststream.rabbit import Channel
 
-from app import gateway, payments
+from app import gateway, payments, webhooks
 from app.broker import broker, payments_exchange, payments_queue, setup_topology
 from app.db import session_factory
 from app.models import PaymentStatus
@@ -39,4 +39,5 @@ async def handle_payment_created(event: PaymentCreatedEvent) -> None:
             status = await gateway.charge(payment.id)
             payment = await payments.mark_processed(session, payment.id, status)
 
+        await webhooks.deliver(payment)
         logger.info("payment %s processed with status %s", payment.id, payment.status)
