@@ -2,6 +2,7 @@ import uuid
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import OutboxMessage, Payment
@@ -29,9 +30,31 @@ async def create_payment(
             payload={"payment_id": str(payment.id)},
         )
     )
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        # ключ уже занят, платёж создал предыдущий запрос
+        await session.rollback()
+        existing = await get_by_idempotency_key(session, idempotency_key)
+        if existing is None:
+            raise
+        return existing, False
     return payment, True
 
 
 async def get_payment(session: AsyncSession, payment_id: UUID) -> Payment | None:
     return await session.scalar(select(Payment).where(Payment.id == payment_id))
+
+
+async def get_by_idempotency_key(session: AsyncSession, key: str) -> Payment | None:
+    return await session.scalar(select(Payment).where(Payment.idempotency_key == key))
+
+
+def matches_request(payment: Payment, data: PaymentCreate) -> bool:
+    return (
+        payment.amount == data.amount
+        and payment.currency == data.currency
+        and payment.description == data.description
+        and payment.payment_metadata == data.metadata
+        and payment.webhook_url == str(data.webhook_url)
+    )

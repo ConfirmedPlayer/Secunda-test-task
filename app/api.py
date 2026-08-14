@@ -16,7 +16,12 @@ async def create_payment(
     idempotency_key: str = Header(alias="Idempotency-Key"),
     session: AsyncSession = Depends(get_session),
 ) -> PaymentAccepted:
-    payment, _ = await payments.create_payment(session, data, idempotency_key)
+    payment, created = await payments.create_payment(session, data, idempotency_key)
+    if not created and not payments.matches_request(payment, data):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Idempotency-Key already used with a different payload",
+        )
     return PaymentAccepted(
         payment_id=payment.id, status=payment.status, created_at=payment.created_at
     )
