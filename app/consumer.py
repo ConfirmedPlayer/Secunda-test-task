@@ -27,17 +27,21 @@ async def declare_topology() -> None:
     channel=Channel(prefetch_count=10),
 )
 async def handle_payment_created(event: PaymentCreatedEvent) -> None:
+    # шлюз и вебхук — сетевые вызовы на секунды, поэтому сессии открываем
+    # только на время запросов к базе, а не на весь обработчик
     async with session_factory() as session:
         payment = await payments.get_payment(session, event.payment_id)
-        if payment is None:
-            # строка outbox пишется в одной транзакции с платежом, так что сюда
-            # мы попасть не должны; повторять всё равно нечего
-            logger.warning("payment %s not found, skipping", event.payment_id)
-            return
 
-        if payment.status == PaymentStatus.PENDING:
-            status = await gateway.charge(payment.id)
+    if payment is None:
+        # строка outbox пишется в одной транзакции с платежом, так что сюда
+        # мы попасть не должны; повторять всё равно нечего
+        logger.warning("payment %s not found, skipping", event.payment_id)
+        return
+
+    if payment.status == PaymentStatus.PENDING:
+        status = await gateway.charge(payment.id)
+        async with session_factory() as session:
             payment = await payments.mark_processed(session, payment.id, status)
 
-        await webhooks.deliver(payment)
-        logger.info("payment %s processed with status %s", payment.id, payment.status)
+    await webhooks.deliver(payment)
+    logger.info("payment %s processed with status %s", payment.id, payment.status)
