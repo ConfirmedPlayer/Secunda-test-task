@@ -82,6 +82,14 @@ async def test_without_idempotency_key_returns_422(client):
     assert response.status_code == 422
 
 
+async def test_too_long_idempotency_key_returns_422(client):
+    response = await client.post(
+        "/api/v1/payments", json=body(), headers=headers("k" * 256)
+    )
+
+    assert response.status_code == 422
+
+
 async def test_unknown_currency_returns_422(client):
     response = await client.post(
         "/api/v1/payments", json=body(currency="GBP"), headers=headers("k7")

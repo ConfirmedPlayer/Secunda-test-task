@@ -13,7 +13,7 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 @router.post("", status_code=status.HTTP_202_ACCEPTED, response_model=PaymentAccepted)
 async def create_payment(
     data: PaymentCreate,
-    idempotency_key: str = Header(alias="Idempotency-Key"),
+    idempotency_key: str = Header(alias="Idempotency-Key", max_length=255),
     session: AsyncSession = Depends(get_session),
 ) -> PaymentAccepted:
     payment, created = await payments.create_payment(session, data, idempotency_key)
